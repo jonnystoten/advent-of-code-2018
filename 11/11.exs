@@ -1,31 +1,66 @@
-defmodule PowerGrid do
-  use Agent
+defmodule Day11 do
+  @grid_size 300
 
-  defstruct [:serial, power_values: %{}]
+  def part1 do
+    sat = create_table()
 
-  def start_link(serial) do
-    Agent.start_link(fn -> %PowerGrid{serial: serial} end, name: __MODULE__)
+    {{x, y, _size}, _power} = find_highest_power(sat, 3..3)
+
+    "#{x},#{y}"
   end
 
-  def power_level(x, y) do
-    Agent.get_and_update(__MODULE__, fn %{power_values: power_values} = grid ->
-      new_power_values =
-        Map.put_new_lazy(power_values, {x, y}, fn ->
-          calculate_power_level(x, y, grid.serial)
-        end)
+  def part2 do
+    sat = create_table()
 
-      grid = %{grid | power_values: new_power_values}
+    {{x, y, size}, _power} = find_highest_power(sat, 1..@grid_size)
 
-      {Map.fetch!(new_power_values, {x, y}), grid}
+    "#{x},#{y},#{size}"
+  end
+
+  defp create_table() do
+    for x <- 1..@grid_size, y <- 1..@grid_size do
+      {x, y}
+    end
+    |> Enum.reduce(%{}, fn point, sat ->
+      Map.put(sat, point, sat_value(point, sat))
     end)
   end
 
-  defp calculate_power_level(x, y, serial) do
+  defp sat_value({0, _}, _), do: 0
+  defp sat_value({_, 0}, _), do: 0
+
+  defp sat_value({x, y}, sat) do
+    case Map.fetch(sat, {x, y}) do
+      {:ok, value} ->
+        value
+
+      :error ->
+        power_level(x, y) + sat_value({x, y - 1}, sat) + sat_value({x - 1, y}, sat) -
+          sat_value({x - 1, y - 1}, sat)
+    end
+  end
+
+  defp sum_area({x, y}, size, sat) do
+    a = {x, y}
+    b = {x + size, y}
+    c = {x, y + size}
+    d = {x + size, y + size}
+    sat_value(d, sat) + sat_value(a, sat) - sat_value(b, sat) - sat_value(c, sat)
+  end
+
+  defp find_highest_power(sat, size_range) do
+    for size <- size_range, upper = @grid_size - (size - 1), x <- 1..upper, y <- 1..upper do
+      {{x, y, size}, sum_area({x - 1, y - 1}, size, sat)}
+    end
+    |> Enum.max_by(fn {_, power} -> power end)
+  end
+
+  defp power_level(x, y) do
     rack_id = x + 10
 
     rack_id
     |> Kernel.*(y)
-    |> Kernel.+(serial)
+    |> Kernel.+(input())
     |> Kernel.*(rack_id)
     |> hundreds_digit()
     |> Kernel.-(5)
@@ -35,34 +70,6 @@ defmodule PowerGrid do
     n
     |> div(100)
     |> rem(10)
-  end
-end
-
-defmodule Day11 do
-  @grid_size 300
-
-  def part1 do
-    PowerGrid.start_link(input())
-    {{x, y}, _power} = find_highest_power()
-
-    "#{x},#{y}"
-  end
-
-  defp find_highest_power do
-    for x <- 1..(@grid_size - 2), y <- 1..(@grid_size - 2) do
-      {{x, y}, cluster_power_level(x, y)}
-    end
-    |> Enum.max_by(fn {_, power} -> power end)
-  end
-
-  defp cluster_power_level(x, y) do
-    for a <- x..(x + 2), b <- y..(y + 2) do
-      PowerGrid.power_level(a, b)
-    end
-    |> Enum.sum()
-  end
-
-  def part2 do
   end
 
   defp input do
